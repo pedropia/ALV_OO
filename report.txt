@@ -1,0 +1,82 @@
+*&======================================================================
+*&                          CVA CONSULTORIA
+*&======================================================================
+*& PROGRAMA: ZSDR054
+*& TITULO:   Monitor de Expedição
+*& AUTOR:    Wanderson Moreira Silva
+*& DATA:    17.03.2022
+*&----------------------------------------------------------------------
+*& HISTÓRICO DE MODIFICAÇÃO
+*&----------------------------------------------------------------------
+*&    DATA    |    AUTOR     |             DESCRIÇÃO
+*&----------------------------------------------------------------------
+*& 17/03/2022 |    Wanderson |          Versão inicial
+*&======================================================================
+
+REPORT  zsdr054.
+
+INCLUDE: zsdi054_top, " Include Top
+         zsdi054_def, " Include Def. Classe
+         zsdi054_scr, " Include Tela
+         zsdi054_imp, " Include Imp. Classe
+         zsdi054_pbo, " Include PBO
+         zsdi054_pai. " Include PAI
+
+START-OF-SELECTION.
+
+  TRY.
+
+      ls_str_filters-r_auart = s_auart[].
+      ls_str_filters-r_vbeln = s_vbeln[].
+      ls_str_filters-r_kunnr = s_kunnr[].
+      ls_str_filters-r_remes = s_remes[].
+      ls_str_filters-r_erdat = s_erdat[].
+
+      "Pendentes
+      IF NOT cb_pendt IS INITIAL.
+        ls_str_filters-s_options-v_pendente = abap_true.
+      ENDIF.
+
+      "Em andamento
+      IF NOT cb_admnt IS INITIAL.
+        ls_str_filters-s_options-v_andamnto = abap_true.
+      ENDIF.
+
+      "Concluído
+      IF NOT cb_concl IS INITIAL.
+        ls_str_filters-s_options-v_concluid = abap_true.
+      ENDIF.
+
+"" Eric / CVA - 03/10/22 - Ajuste para apresentar Histórico de remessas já faturadas - Inicio
+      "Histórico
+      IF NOT cb_histo IS INITIAL.
+        ls_str_filters-s_options-v_historic = abap_true.
+        "" Necessário forçar esse status, pois todas as faturas do
+        "" hitórico estarão com status Concluído, e se o mesmo não
+        "" estiver selecionado, não irá ser apresentado no relatório
+        ls_str_filters-s_options-v_concluid = abap_true.
+      ENDIF.
+"" Eric / CVA - 03/10/22 - Ajuste para apresentar Histórico de remessas já faturadas - Fim
+
+      CREATE OBJECT o_monitor
+        EXPORTING
+          is_filters = ls_str_filters.
+
+      o_monitor->mtd_seleciona_dados( ).
+
+      SET HANDLER:
+        o_monitor->mtd_on_toolbar       FOR ALL INSTANCES,
+        o_monitor->mtd_on_hotspot_click FOR ALL INSTANCES,
+        o_monitor->mtd_on_user_command  FOR ALL INSTANCES.
+
+      CALL SCREEN 9000.
+
+    CATCH lcx_exceptions INTO o_exception.
+      MESSAGE ID o_exception->if_t100_message~t100key-msgid
+         TYPE 'S' NUMBER o_exception->if_t100_message~t100key-msgno
+                    WITH o_exception->if_t100_message~t100key-attr1
+                         o_exception->if_t100_message~t100key-attr2
+                         o_exception->if_t100_message~t100key-attr3
+                         o_exception->if_t100_message~t100key-attr4
+      DISPLAY LIKE 'E' .
+  ENDTRY.

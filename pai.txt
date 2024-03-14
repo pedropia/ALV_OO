@@ -1,0 +1,59 @@
+*&======================================================================
+*&                          CVA CONSULTORIA
+*&======================================================================
+*& PROGRAMA: ZSDI054_PAI
+*& TITULO:   Include PAI
+*& AUTOR:    Wanderson Moreira Silva
+*& DATA:    17.03.2022
+*&----------------------------------------------------------------------
+*& HISTÓRICO DE MODIFICAÇÃO
+*&----------------------------------------------------------------------
+*&    DATA    |    AUTOR     |             DESCRIÇÃO
+*&----------------------------------------------------------------------
+*& 17/03/2022 |    Wanderson |          Versão inicial
+*&======================================================================
+*&---------------------------------------------------------------------*
+*&      Module  MOD9XXX_USER_COMMAND_EXIT  INPUT
+*&---------------------------------------------------------------------*
+MODULE mod9xxx_user_command_exit INPUT.
+  LEAVE TO SCREEN 0.
+ENDMODULE.                 " MOD9XXX_USER_COMMAND_EXIT  INPUT
+
+
+*----------------------------------------------------------------------*
+*  MODULE user_command_0100 INPUT
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+
+  CLEAR: ok_code.
+
+  ok_code = sy-ucomm.
+
+  CASE ok_code.
+    WHEN 'OKAY'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDMODULE.                 " USER_COMMAND_0100  INPUT
+
+*&---------------------------------------------------------------------*
+*&      Module  EXIT_COMMAND  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE exit_command INPUT.
+
+  CLEAR: ok_code.
+
+  ok_code = sy-ucomm.
+
+  CASE ok_code.
+    WHEN 'CANCEL'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDMODULE.                 " EXIT_COMMAND  INPUT

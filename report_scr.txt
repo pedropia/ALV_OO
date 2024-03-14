@@ -1,0 +1,94 @@
+*&======================================================================
+*&                          CVA CONSULTORIA
+*&======================================================================
+*& PROGRAMA: ZSDI054_SCR
+*& TITULO:   Include para Tela
+*& AUTOR:    Wanderson Moreira Silva
+*& DATA:    17.03.2022
+*&----------------------------------------------------------------------
+*& HISTÓRICO DE MODIFICAÇÃO
+*&----------------------------------------------------------------------
+*&    DATA    |    AUTOR     |             DESCRIÇÃO
+*&----------------------------------------------------------------------
+*& 17/03/2022 |    Wanderson |          Versão inicial
+*&======================================================================
+TABLES: vbak, likp.
+
+SELECTION-SCREEN BEGIN OF BLOCK b10 WITH FRAME TITLE text-b10 .
+SELECTION-SCREEN SKIP.
+
+SELECTION-SCREEN SKIP.
+
+SELECTION-SCREEN: BEGIN OF BLOCK bl1 WITH FRAME TITLE text-bl1.
+SELECT-OPTIONS: s_auart FOR vbak-auart,
+                s_vbeln FOR vbak-vbeln,
+                s_kunnr FOR vbak-kunnr,
+                s_remes FOR likp-vbeln,
+                s_erdat FOR likp-erdat OBLIGATORY.
+
+SELECTION-SCREEN SKIP.
+
+SELECTION-SCREEN: BEGIN OF BLOCK bl2 WITH FRAME TITLE text-bl2.
+PARAMETERS: cb_pendt AS CHECKBOX DEFAULT abap_true,
+            cb_admnt AS CHECKBOX,
+            cb_concl AS CHECKBOX,
+            cb_histo AS CHECKBOX.
+SELECTION-SCREEN: END OF BLOCK bl2.
+
+SELECTION-SCREEN: BEGIN OF BLOCK b13 WITH FRAME TITLE text-b13.
+PARAMETERS: rdb1 RADIOBUTTON GROUP rad DEFAULT 'X',
+            rdb2 RADIOBUTTON GROUP rad.
+SELECTION-SCREEN: END OF BLOCK b13.
+
+SELECTION-SCREEN SKIP.
+PARAMETERS: p_varian TYPE disvariant-variant.
+SELECTION-SCREEN SKIP.
+
+SELECTION-SCREEN: END OF BLOCK bl1.
+SELECTION-SCREEN END OF BLOCK b10.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_varian.
+* Executa função para exibir as variantes ao clicar no matchcode
+  wa_variant-report = sy-repid.
+
+  CALL FUNCTION 'REUSE_ALV_VARIANT_F4'
+    EXPORTING
+      is_variant    = wa_variant
+      i_save        = 'A'
+    IMPORTING
+      es_variant    = wa_variant
+    EXCEPTIONS
+      not_found     = 1
+      program_error = 2
+      OTHERS        = 3.
+  IF sy-subrc IS INITIAL.
+    p_varian = wa_variant-variant.
+  ENDIF.
+
+*----------------------------------------------------------------------*
+* Initialization                                                       *
+*----------------------------------------------------------------------*
+INITIALIZATION.
+
+  MOVE sy-repid TO gv_repid.
+
+* Executa função que verifica e busca a variante default, se existir
+  IF p_varian IS INITIAL.
+
+    wa_variant-report = gv_repid.
+
+    CALL FUNCTION 'REUSE_ALV_VARIANT_DEFAULT_GET'
+      EXPORTING
+        i_save        = 'A'
+      CHANGING
+        cs_variant    = wa_variant
+      EXCEPTIONS
+        wrong_input   = 1
+        not_found     = 2
+        program_error = 3
+        OTHERS        = 4.
+
+    IF sy-subrc IS INITIAL.
+      p_varian = wa_variant-variant.
+    ENDIF.
+  ENDIF.

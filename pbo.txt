@@ -1,0 +1,35 @@
+*&======================================================================
+*&                          CVA CONSULTORIA
+*&======================================================================
+*& PROGRAMA: ZSDI054_PBO
+*& TITULO:   Include PBO
+*& AUTOR:    Wanderson Moreira Silva
+*& DATA:    17.03.2022
+*&----------------------------------------------------------------------
+*& HISTÓRICO DE MODIFICAÇÃO
+*&----------------------------------------------------------------------
+*&    DATA    |    AUTOR     |             DESCRIÇÃO
+*&----------------------------------------------------------------------
+*& 17/03/2022 |    Wanderson |          Versão inicial
+*&======================================================================
+*&---------------------------------------------------------------------*
+*&      Module  MOD9XXX_STATUS  OUTPUT
+*&---------------------------------------------------------------------*
+MODULE mod9xxx_status OUTPUT.
+  DATA: lt_status TYPE TABLE OF sy-ucomm.
+
+  SET PF-STATUS sy-dynnr EXCLUDING lt_status[] .
+  SET TITLEBAR  sy-dynnr WITH 'Monitor de Expedição'.
+ENDMODULE.                 " MOD9XXX_STATUS  OUTPUT
+*&---------------------------------------------------------------------*
+*&      Module  MOD9000_CARREGAR  OUTPUT
+*&---------------------------------------------------------------------*
+MODULE mod9000_carregar OUTPUT.
+  o_monitor->mtd_mod9000_carregar( ).
+ENDMODULE.                 " MOD9000_CARREGAR  OUTPUT
+
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PFSTATUS_0100'.
+  SET TITLEBAR 'TITLE_0100'.
+
+ENDMODULE.                 " STATUS_0100  OUTPUT

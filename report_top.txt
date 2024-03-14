@@ -1,0 +1,42 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSDI054_TOP
+*&---------------------------------------------------------------------*
+
+TABLES: zsdr054_s_0100.
+
+TYPES: BEGIN OF ty_str_filters,
+  r_auart TYPE RANGE OF vbak-auart,
+  r_vbeln TYPE RANGE OF vbak-vbeln,
+  r_kunnr TYPE RANGE OF vbak-kunnr,
+  r_remes TYPE RANGE OF likp-vbeln,
+  r_erdat TYPE RANGE OF likp-erdat,
+
+  BEGIN OF s_options,
+    v_pendente TYPE xflag,
+    v_andamnto TYPE xflag,
+    v_concluid TYPE xflag,
+    "" Eric / CVA - 03/10/22 - Ajuste para apresentar Histórico de remessas já faturadas - Inicio
+    v_historic type xflag,
+    "" Eric / CVA - 03/10/22 - Ajuste para apresentar Histórico de remessas já faturadas - Fim
+  END OF   s_options,
+END OF ty_str_filters.
+
+DATA: BEGIN OF s_str_9000,
+  o_alv TYPE REF TO cl_gui_alv_grid,
+END   OF s_str_9000,
+
+ls_str_filters TYPE ty_str_filters.
+
+DATA  it_bdc  TYPE TABLE OF bdcdata.
+
+DATA: ok_code LIKE sy-ucomm,
+      gv_repid     TYPE sy-repid,
+      wa_variant   TYPE disvariant.
+
+DATA: gv_flag_criar_ot TYPE xfeld VALUE ' '.
+
+CLASS: lcl_monitor    DEFINITION DEFERRED,
+       lcx_exceptions DEFINITION DEFERRED.
+
+DATA: o_monitor    TYPE REF TO lcl_monitor,
+      o_exception TYPE REF TO lcx_exceptions.

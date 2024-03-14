@@ -1,0 +1,1565 @@
+*&======================================================================
+*&                          CVA CONSULTORIA
+*&======================================================================
+*& PROGRAMA: ZSDI054_IMP
+*& TITULO:   Include para Implementação da Classe
+*& AUTOR:    Wanderson Moreira Silva
+*& DATA:    17.03.2022f
+*&----------------------------------------------------------------------
+*& HISTÓRICO DE MODIFICAÇÃO
+*&----------------------------------------------------------------------
+*&    DATA    |    AUTOR     |             DESCRIÇÃO
+*&----------------------------------------------------------------------
+*& 17/03/2022 |    Wanderson |          Versão inicial
+*&======================================================================
+
+CLASS lcx_exceptions IMPLEMENTATION.
+  METHOD constructor.
+    super->constructor( ).
+    if_t100_message~t100key-msgid = iv_id.
+    if_t100_message~t100key-msgno = iv_no.
+    if_t100_message~t100key-attr1 = iv_1.
+    if_t100_message~t100key-attr2 = iv_2.
+    if_t100_message~t100key-attr3 = iv_3.
+    if_t100_message~t100key-attr4 = iv_4.
+
+  ENDMETHOD.                    "constructor
+ENDCLASS.                    "lcx_exceptions IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS lcl_monitor IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_monitor IMPLEMENTATION.
+
+  METHOD: constructor.
+    s_str_filters = is_filters.
+
+    "Valida Authority-Check
+    me->mtd_authority_check( ).
+
+  ENDMETHOD.                    "constructor
+
+  METHOD: mtd_authority_check.
+    DATA lv_msg TYPE symsgv.
+
+    IF sy-batch IS INITIAL.
+
+      MOVE sy-tcode TO lv_msg.
+
+      AUTHORITY-CHECK OBJECT 'S_TCODE'
+      ID 'TCD' FIELD sy-tcode.
+      IF sy-subrc <> 0.
+        RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = '00'
+          iv_no = '172'
+          iv_1  = lv_msg.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.                    "mtd_authority_check
+
+  METHOD: mtd_seleciona_dados.
+    TYPES:
+      BEGIN OF ty_likp,
+        vbeln TYPE likp-vbeln,
+        erdat TYPE likp-erdat,
+        btgew TYPE likp-btgew,
+      END OF ty_likp,
+
+      BEGIN OF ty_lips,
+        vbeln TYPE lips-vbeln,
+        posnr TYPE lips-posnr,
+        matnr TYPE lips-matnr,
+        arktx TYPE lips-arktx,
+        lgnum TYPE lips-lgnum,
+        lfimg TYPE lips-lfimg,
+      END OF ty_lips,
+
+      BEGIN OF ty_vbfa,
+        vbelv   TYPE vbfa-vbelv,
+        vbeln   TYPE vbfa-vbeln,
+        vbtyp_n TYPE vbfa-vbtyp_n,
+        vbtyp_v TYPE vbfa-vbtyp_v,
+      END OF ty_vbfa,
+
+      BEGIN OF ty_vbak,
+        vbeln TYPE vbak-vbeln,
+        vtweg TYPE vbak-vtweg,
+        kunnr TYPE vbak-kunnr,
+      END OF ty_vbak,
+
+      BEGIN OF ty_zsdt071,
+        vbeln   TYPE zsdt071-vbeln,
+        usuario TYPE zsdt071-usuario,
+        usr_set_status TYPE zsdt071-usr_set_status,
+      END OF ty_zsdt071,
+
+      BEGIN OF ty_kna1,
+        kunnr TYPE kna1-kunnr,
+        name1 TYPE kna1-name1,
+      END OF ty_kna1,
+
+      BEGIN OF ty_ltak,
+        lgnum TYPE ltak-lgnum,
+        tanum TYPE ltak-tanum,
+        vbeln TYPE ltak-vbeln,
+        bdatu TYPE ltak-bdatu,
+        bzeit TYPE ltak-bzeit,
+      END OF ty_ltak,
+
+      BEGIN OF ty_ltap,
+        lgnum TYPE ltap-lgnum,
+        tanum TYPE ltap-tanum,
+        tapos TYPE ltap-tapos,
+        posnr TYPE ltap-posnr,
+        vista TYPE ltap-vista,
+        nista TYPE ltap-nista,
+        vsola TYPE ltap-vsola,
+        ename TYPE ltap-ename,
+        pvqui TYPE ltap-pvqui,
+        pquit TYPE ltap-pquit,
+        edatu	TYPE ltap-edatu,
+        ezeit	TYPE ltap-ezeit,
+      END OF ty_ltap.
+
+    "-----------------------------------------------------------------
+    DATA: lt_likp           TYPE TABLE OF ty_likp,
+          lt_vbfa           TYPE TABLE OF ty_vbfa,
+          lt_vbak           TYPE TABLE OF ty_vbak,
+          lt_zsdt071        TYPE TABLE OF ty_zsdt071,
+          lt_zsdt072        TYPE TABLE OF zsdt072,
+          lt_kna1           TYPE TABLE OF ty_kna1,
+          lt_lips           TYPE TABLE OF ty_lips,
+          lt_ltak           TYPE TABLE OF ty_ltak,
+          lt_alv_output_aux TYPE STANDARD TABLE OF zsde054,
+          lt_ltap           TYPE SORTED TABLE OF ty_ltap
+                            WITH UNIQUE KEY lgnum tanum tapos edatu ezeit,
+          lt_ltap_aux       TYPE SORTED TABLE OF ty_ltap
+                            WITH UNIQUE KEY lgnum tanum tapos edatu ezeit.
+
+    DATA: ls_likp           LIKE LINE OF lt_likp,
+          ls_vbfa           LIKE LINE OF lt_vbfa,
+          ls_vbak           LIKE LINE OF lt_vbak,
+          ls_kna1           LIKE LINE OF lt_kna1,
+          ls_lips           LIKE LINE OF lt_lips,
+          ls_ltak           LIKE LINE OF lt_ltak,
+          ls_zsdt071        LIKE LINE OF lt_zsdt071,
+          ls_zsdt072        LIKE LINE OF lt_zsdt072,
+          ls_alv_output_aux LIKE LINE OF lt_alv_output_aux,
+          ls_ltap           LIKE LINE OF lt_ltap,
+          ls_ltap_aux       LIKE LINE OF lt_ltap_aux.
+
+    DATA: lv_tabix TYPE sy-tabix,
+          lv_count TYPE numc4,
+          w_lines  TYPE i.
+
+    FIELD-SYMBOLS: <fs_alv_output> LIKE LINE OF t_alv_output.
+
+    FREE: t_alv_output[].
+
+    SELECT vbeln erdat btgew
+      INTO TABLE lt_likp
+      FROM likp
+     WHERE vbeln IN me->s_str_filters-r_remes
+       AND erdat IN me->s_str_filters-r_erdat.
+
+    IF lt_likp[] IS NOT INITIAL.
+
+      SELECT vbelv vbeln vbtyp_n vbtyp_v
+        INTO TABLE lt_vbfa
+        FROM vbfa
+         FOR ALL ENTRIES IN lt_likp
+       WHERE vbelv   EQ lt_likp-vbeln
+         AND vbtyp_n EQ 'M'
+         AND vbtyp_v EQ 'J'.
+
+      IF sy-subrc = 0.
+
+        LOOP AT lt_likp INTO ls_likp.
+          lv_tabix = sy-tabix.
+
+          "" Eric / CVA - 03/10/22 - Ajuste para apresentar Histórico de remessas já faturadas - Inicio
+          IF ls_str_filters-s_options-v_historic NE abap_true.
+
+            READ TABLE lt_vbfa WITH KEY vbelv = ls_likp-vbeln
+                                        TRANSPORTING NO FIELDS.
+            IF sy-subrc EQ 0.
+              DELETE lt_likp INDEX lv_tabix.
+            ENDIF.
+          ENDIF.
+
+          "" Condição onde apenas as remessas já faturadas (Histórico) foi selecionado"
+          IF cb_pendt IS INITIAL AND cb_admnt IS INITIAL AND
+             cb_concl IS INITIAL AND cb_histo IS NOT INITIAL.
+
+            READ TABLE lt_vbfa WITH KEY vbelv = ls_likp-vbeln
+                                        TRANSPORTING NO FIELDS.
+            IF sy-subrc EQ 4.
+              DELETE lt_likp INDEX lv_tabix.
+            ENDIF.
+          ENDIF.
+          "" Eric / CVA - 03/10/22 - Ajuste para apresentar Histórico de remessas já faturadas - Fim
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+    IF lt_likp[] IS INITIAL.
+      RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '047'. "Nenhum registro localizado!
+    ENDIF.
+
+    SORT lt_likp BY vbeln.
+
+    SELECT vbelv vbeln vbtyp_n vbtyp_v
+      INTO TABLE lt_vbfa
+      FROM vbfa
+       FOR ALL ENTRIES IN lt_likp
+     WHERE vbelv   IN me->s_str_filters-r_vbeln
+       AND vbeln   EQ lt_likp-vbeln
+       AND vbtyp_n EQ 'J'
+       AND vbtyp_v IN ('C','I').
+
+    IF sy-subrc IS NOT INITIAL.
+      RAISE EXCEPTION TYPE lcx_exceptions
+      EXPORTING
+        iv_id = me->c_message_class
+        iv_no = '047'. "Nenhum registro localizado!
+    ENDIF.
+
+    SORT lt_vbfa BY vbelv DESCENDING vbeln.
+
+    SELECT vbeln vtweg kunnr
+      INTO TABLE lt_vbak
+      FROM vbak
+       FOR ALL ENTRIES IN lt_vbfa
+     WHERE vbeln EQ lt_vbfa-vbelv
+       AND kunnr IN me->s_str_filters-r_kunnr
+       AND auart IN me->s_str_filters-r_auart.
+
+    IF lt_vbak IS NOT INITIAL.
+      SELECT kunnr name1
+        INTO TABLE lt_kna1
+        FROM kna1
+         FOR ALL ENTRIES IN lt_vbak
+       WHERE kunnr EQ lt_vbak-kunnr.
+
+      SORT lt_kna1 BY kunnr.
+
+      SELECT vbeln usuario usr_set_status
+        INTO TABLE lt_zsdt071 FROM zsdt071
+         FOR ALL ENTRIES IN lt_lips
+       WHERE vbeln EQ lt_lips-vbeln.
+
+      IF sy-subrc EQ 0.
+        SORT lt_zsdt071 BY vbeln.
+      ENDIF.
+
+      SELECT *
+        INTO TABLE lt_zsdt072
+        FROM zsdt072
+         FOR ALL ENTRIES IN lt_lips
+       WHERE vbeln EQ lt_lips-vbeln.
+
+      IF sy-subrc EQ 0.
+        SORT lt_zsdt072 BY vbeln.
+      ENDIF.
+
+    ENDIF.
+
+    SELECT vbeln posnr matnr arktx lgnum lfimg
+      INTO TABLE lt_lips
+      FROM lips
+       FOR ALL ENTRIES IN lt_likp
+     WHERE vbeln EQ lt_likp-vbeln.
+
+    IF sy-subrc IS INITIAL.
+      DELETE lt_lips WHERE lfimg LE 0.
+    ENDIF.
+
+    IF lt_lips IS NOT INITIAL.
+      SORT lt_lips BY vbeln.
+
+      SELECT lgnum tanum vbeln bdatu bzeit
+        FROM ltak
+        INTO TABLE lt_ltak
+         FOR ALL ENTRIES IN lt_lips
+       WHERE lgnum EQ lt_lips-lgnum
+         AND vbeln EQ lt_lips-vbeln.
+
+      IF lt_ltak IS NOT INITIAL.
+        SORT lt_ltak BY lgnum vbeln.
+
+        SELECT lgnum tanum tapos posnr vista
+               nista vsola ename pquit pvqui
+               edatu ezeit
+          FROM ltap
+          INTO TABLE lt_ltap
+           FOR ALL ENTRIES IN lt_ltak
+         WHERE lgnum EQ lt_ltak-lgnum
+           AND tanum EQ lt_ltak-tanum
+           AND vorga NE 'ST'.
+
+        LOOP AT lt_ltak INTO ls_ltak.
+
+          lv_tabix = sy-tabix.
+
+          READ TABLE lt_ltap WITH KEY lgnum = ls_ltak-lgnum
+                                      tanum = ls_ltak-tanum
+                                      TRANSPORTING NO FIELDS.
+          IF sy-subrc <> 0.
+            DELETE lt_ltak INDEX lv_tabix.
+          ENDIF.
+
+        ENDLOOP.
+
+      ENDIF.
+    ENDIF.
+
+    SORT lt_vbfa[] BY vbeln.
+    SORT lt_vbak[] BY vbeln.
+    SORT lt_kna1[] BY kunnr.
+
+    LOOP AT lt_lips INTO ls_lips.
+
+      READ TABLE lt_vbfa WITH KEY vbeln = ls_lips-vbeln
+        INTO ls_vbfa
+        BINARY SEARCH.
+      CHECK sy-subrc IS INITIAL.
+
+      READ TABLE lt_vbak WITH KEY vbeln = ls_vbfa-vbelv
+        INTO ls_vbak
+        BINARY SEARCH.
+      CHECK sy-subrc IS INITIAL.
+
+* CVA / Marconny Gomide - Data 19/10/2022 - Ch 5905
+
+      "Popula tab. do ALV
+      APPEND INITIAL LINE TO me->t_alv_output ASSIGNING <fs_alv_output>.
+
+      READ TABLE lt_ltak WITH KEY vbeln = ls_vbfa-vbeln
+        INTO ls_ltak
+        BINARY SEARCH.
+
+      READ TABLE lt_ltap WITH KEY lgnum = ls_ltak-lgnum
+                                  tanum = ls_ltak-tanum
+        INTO ls_ltap
+        BINARY SEARCH.
+
+      READ TABLE lt_kna1 WITH KEY kunnr = ls_vbak-kunnr
+        INTO ls_kna1
+        BINARY SEARCH.
+      CHECK sy-subrc IS INITIAL.
+
+      <fs_alv_output>-vbeln    = ls_vbak-vbeln. " Ordem de Venda
+      <fs_alv_output>-vtweg    = ls_vbak-vtweg. " Canal de distribuição
+      <fs_alv_output>-kunnr    = ls_vbak-kunnr. " Cliente
+      <fs_alv_output>-name1    = ls_kna1-name1. " Nome
+      <fs_alv_output>-vbeln_vl = ls_lips-vbeln. " Remessa
+      <fs_alv_output>-posnr    = ls_lips-posnr. " Item
+      <fs_alv_output>-matnr    = ls_lips-matnr. " Material
+      <fs_alv_output>-arktx    = ls_lips-arktx. " Descrição
+      <fs_alv_output>-lgnum    = ls_lips-lgnum. " Nº DO Depósito
+      <fs_alv_output>-lfimg    = ls_lips-lfimg. " Quantidade
+*      <fs_alv_output>-bdatu    = ls_ltak-bdatu. " Data OT
+*      <fs_alv_output>-bzeit    = ls_ltak-bzeit. " Hora OT
+      <fs_alv_output>-qdatu    = ls_ltap-edatu. " Data Confirmação OT
+      <fs_alv_output>-qzeit    = ls_ltap-ezeit. " Hora Confirmação OT
+
+      lt_ltap_aux[] = lt_ltap[].
+
+      CLEAR : <fs_alv_output>-usuario_sm,
+              <fs_alv_output>-data_sm,
+              <fs_alv_output>-hora_sm,
+              <fs_alv_output>-qdatu,
+              <fs_alv_output>-qzeit,
+              <fs_alv_output>-ult_datu,
+              <fs_alv_output>-ult_zeit.
+
+      LOOP AT lt_ltap_aux INTO ls_ltap_aux
+        WHERE lgnum EQ ls_ltak-lgnum
+          AND tanum EQ ls_ltak-tanum.
+
+        IF <fs_alv_output>-data_sm IS INITIAL
+          OR <fs_alv_output>-data_sm LT ls_ltap_aux-edatu
+          OR (  <fs_alv_output>-data_sm GE ls_ltap_aux-edatu
+            AND  <fs_alv_output>-hora_sm LT ls_ltap_aux-ezeit ).
+
+          <fs_alv_output>-usuario_sm = ls_ltap_aux-ename.
+          <fs_alv_output>-data_sm = ls_ltap_aux-edatu.
+          <fs_alv_output>-hora_sm = ls_ltap_aux-ezeit.
+
+        ENDIF.
+
+        IF <fs_alv_output>-ult_datu IS INITIAL
+          OR <fs_alv_output>-ult_datu LT ls_ltap_aux-edatu
+          OR (  <fs_alv_output>-ult_datu GE ls_ltap_aux-edatu
+            AND  <fs_alv_output>-ult_zeit LT ls_ltap_aux-ezeit ).
+
+          <fs_alv_output>-ult_datu = ls_ltap_aux-edatu.
+          <fs_alv_output>-ult_zeit = ls_ltap_aux-ezeit.
+
+        ENDIF.
+
+        IF <fs_alv_output>-qdatu IS INITIAL
+          OR <fs_alv_output>-qdatu GT ls_ltap_aux-edatu
+          OR (  <fs_alv_output>-qdatu LE ls_ltap_aux-edatu
+            AND  <fs_alv_output>-qzeit GT ls_ltap_aux-ezeit ).
+
+          <fs_alv_output>-qname = ls_ltap_aux-ename.
+          <fs_alv_output>-qdatu = ls_ltap_aux-edatu.
+          <fs_alv_output>-qzeit = ls_ltap_aux-ezeit.
+
+        ENDIF.
+
+      ENDLOOP.
+
+      READ TABLE lt_zsdt071 INTO ls_zsdt071 WITH KEY vbeln = ls_lips-vbeln
+                                            BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        MOVE ls_zsdt071-usuario TO <fs_alv_output>-qname. "Nome do usuario
+      ELSE.
+        <fs_alv_output>-qname = ls_ltap-ename. "Nome do usuario
+      ENDIF.
+
+      READ TABLE lt_zsdt072 INTO ls_zsdt072 WITH KEY vbeln = ls_lips-vbeln
+                                            BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        MOVE ls_zsdt072-usuario_sm TO <fs_alv_output>-usuario_sm. " Nome do usuario da SM
+        MOVE ls_zsdt072-hora       TO <fs_alv_output>-hora_sm.    " Hora da SM
+        MOVE ls_zsdt072-data       TO <fs_alv_output>-data_sm.    " Data da SM
+      ENDIF.
+
+      READ TABLE lt_likp INTO ls_likp WITH KEY
+        vbeln = ls_lips-vbeln BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        MOVE ls_likp-btgew TO <fs_alv_output>-btgew. "Peso total da Remessa
+      ENDIF.
+
+      LOOP AT lt_ltak INTO ls_ltak.
+*        READ TABLE lt_ltak WITH KEY lgnum = ls_lips-lgnum
+*                                    vbeln = ls_lips-vbeln
+*                               INTO ls_ltak
+*                             BINARY SEARCH.
+
+        READ TABLE lt_ltap WITH KEY lgnum = ls_ltak-lgnum
+                                    tanum = ls_ltak-tanum
+                                    posnr = ls_lips-posnr
+                               INTO ls_ltap.
+
+        IF sy-subrc IS INITIAL.
+          EXIT.
+        ENDIF.
+      ENDLOOP.
+
+      IF ls_ltap-pquit EQ 'X' AND ls_ltap-pvqui EQ 'X'.
+        <fs_alv_output>-status_ot = me->c_str_semaforo-verde.
+      ELSEIF ( ls_ltap-pquit EQ 'X' AND ls_ltap-pvqui EQ ' ' ) OR
+             ( ls_ltap-pquit EQ ' ' AND ls_ltap-pvqui EQ 'X' ) .
+        <fs_alv_output>-status_ot = me->c_str_semaforo-amarelo.
+      ELSEIF ls_ltap-pquit EQ ' ' AND ls_ltap-pvqui EQ ' '.
+        <fs_alv_output>-status_ot = me->c_str_semaforo-vermelho.
+      ENDIF.
+
+      CLEAR: ls_ltak, ls_ltap.
+
+      LOOP AT lt_ltak INTO ls_ltak WHERE lgnum = ls_lips-lgnum
+                                     AND vbeln = ls_lips-vbeln.
+**      READ TABLE lt_ltak WITH KEY lgnum = ls_lips-lgnum
+**                                  vbeln = ls_lips-vbeln
+**                             INTO ls_ltak
+**                           BINARY SEARCH.
+
+**        IF sy-subrc IS INITIAL.
+        LOOP AT lt_ltap INTO ls_ltap
+                       WHERE lgnum = ls_ltak-lgnum
+                         AND tanum = ls_ltak-tanum
+                         AND posnr = ls_lips-posnr.
+          ADD ls_ltap-vsola TO <fs_alv_output>-vsola. "Picking
+          ADD ls_ltap-nista TO <fs_alv_output>-nista. "Separado
+
+        ENDLOOP.
+**        ENDIF.
+      ENDLOOP.
+
+      SELECT COUNT(*)
+        FROM lips
+        INTO lv_count
+        WHERE vbeln EQ ls_lips-vbeln.
+
+      IF sy-subrc IS INITIAL.
+        MOVE lv_count TO <fs_alv_output>-qtd_remessa. "Peso total da Remessa
+      ENDIF.
+
+**      IF <fs_alv_output>-vsola GT 0 AND <fs_alv_output>-nista GT 0.
+**        <fs_alv_output>-status = me->c_str_semaforo-verde.
+**      ELSEIF <fs_alv_output>-vsola GT 0.
+**        <fs_alv_output>-status = me->c_str_semaforo-amarelo.
+**      ELSEIF <fs_alv_output>-vsola EQ 0 AND <fs_alv_output>-nista EQ 0.
+**        <fs_alv_output>-status = me->c_str_semaforo-vermelho.
+**      ENDIF.
+
+      <fs_alv_output>-status = me->c_str_semaforo-amarelo. "Ajuste para farol iniciar amarelo.
+
+      IF <fs_alv_output>-vsola EQ 0 AND <fs_alv_output>-nista EQ 0.
+        <fs_alv_output>-status = me->c_str_semaforo-vermelho.
+**      ELSEIF <fs_alv_output>-vsola GT 0.
+**        <fs_alv_output>-status = me->c_str_semaforo-amarelo.
+      ENDIF.
+
+      IF ls_ltap-pquit EQ 'X' AND ls_ltap-pvqui EQ 'X'.
+        <fs_alv_output>-status = me->c_str_semaforo-verde.
+      ENDIF.
+
+      "-----------------------------------------------------------------
+
+    ENDLOOP.
+
+    "" CVA / Eric - 22/08/22 -  Ajuste status das remessas para relatório sintético - Início
+
+    ""Para relatório sintético, será apresentado apenas uma linha de ALV por fornecimento
+    ""Mas deve ser analisado os semáfaros das linhas da remessa, onde deve-se respeitar a
+    ""seguinte sequência:
+    "" 1 - Remessa com Status Vermelho, Amarelo e Verde - Apresentar a linha com Status VERMELHO
+    "" 2 - Remessa com Status Amarelo e Verde - Apresentar a linha com Status AMARELO
+    "" A prioridade sempre é : VERMELHO >> AMARELO >> VERDE
+    "" Obs.: Uma remessa só tem status VERDE (Concluído) quando TODOS os seu itens já foram atendidos!
+
+    ""Relatório sintético
+    IF rdb2 EQ 'X'.
+
+      lt_alv_output_aux[] = me->t_alv_output[].
+
+      LOOP AT lt_alv_output_aux INTO ls_alv_output_aux.
+
+        READ TABLE me->t_alv_output WITH KEY vbeln_vl = ls_alv_output_aux-vbeln_vl
+                                         status   = me->c_str_semaforo-vermelho
+                                    TRANSPORTING NO FIELDS.
+        IF sy-subrc IS INITIAL.
+
+          DELETE me->t_alv_output WHERE status EQ me->c_str_semaforo-amarelo AND
+                                      vbeln_vl EQ ls_alv_output_aux-vbeln_vl.
+          DELETE me->t_alv_output WHERE status EQ me->c_str_semaforo-verde AND
+                                      vbeln_vl EQ ls_alv_output_aux-vbeln_vl..
+        ELSE.
+
+          READ TABLE me->t_alv_output WITH KEY vbeln_vl = ls_alv_output_aux-vbeln_vl
+                                               status   = me->c_str_semaforo-amarelo
+                                      TRANSPORTING NO FIELDS.
+          IF sy-subrc IS INITIAL.
+
+            DELETE me->t_alv_output WHERE status EQ me->c_str_semaforo-verde AND
+                                        vbeln_vl EQ ls_alv_output_aux-vbeln_vl.
+          ENDIF.
+        ENDIF.
+
+      ENDLOOP.
+    ENDIF.
+
+    "" CVA / Eric - 22/08/22 -  Ajuste status das remessas para relatório sintético - Fim
+
+    IF NOT ( ls_str_filters-s_options-v_pendente IS NOT INITIAL AND
+             ls_str_filters-s_options-v_andamnto IS NOT INITIAL AND
+             ls_str_filters-s_options-v_concluid IS NOT INITIAL ).
+
+      IF ls_str_filters-s_options-v_pendente IS INITIAL AND
+         ls_str_filters-s_options-v_andamnto IS INITIAL AND
+         ls_str_filters-s_options-v_concluid IS INITIAL.
+        FREE me->t_alv_output.
+      ENDIF.
+
+      "Aplica os filtros da Tela de seleção
+      IF ls_str_filters-s_options-v_pendente IS NOT INITIAL AND  "Pendente
+         ls_str_filters-s_options-v_andamnto IS INITIAL     AND  "Em andamento
+         ls_str_filters-s_options-v_concluid IS INITIAL.         "Concluido
+        DELETE me->t_alv_output WHERE status NE me->c_str_semaforo-vermelho.
+      ENDIF.
+
+      IF ls_str_filters-s_options-v_andamnto IS NOT INITIAL AND  "Em andamento
+         ls_str_filters-s_options-v_pendente IS INITIAL     AND  "Pendente
+         ls_str_filters-s_options-v_concluid IS INITIAL.         "Concluido
+        DELETE me->t_alv_output WHERE status NE me->c_str_semaforo-amarelo.
+      ENDIF.
+
+      IF ls_str_filters-s_options-v_concluid IS NOT INITIAL AND  "Concluido
+         ls_str_filters-s_options-v_pendente IS INITIAL     AND  "Pendente
+         ls_str_filters-s_options-v_andamnto IS INITIAL.         "Em andamento
+        DELETE me->t_alv_output WHERE status NE me->c_str_semaforo-verde.
+      ENDIF.
+      "---
+      IF ls_str_filters-s_options-v_pendente IS INITIAL     AND  "Pendente
+         ls_str_filters-s_options-v_andamnto IS NOT INITIAL AND  "Em andamento
+         ls_str_filters-s_options-v_concluid IS NOT INITIAL.     "Concluido
+        DELETE me->t_alv_output WHERE status EQ me->c_str_semaforo-vermelho.
+      ENDIF.
+
+      IF ls_str_filters-s_options-v_andamnto IS INITIAL     AND  "Em andamento
+         ls_str_filters-s_options-v_pendente IS NOT INITIAL AND  "Pendente
+         ls_str_filters-s_options-v_concluid IS NOT INITIAL.     "Concluido
+        DELETE me->t_alv_output WHERE status EQ me->c_str_semaforo-amarelo.
+      ENDIF.
+
+      IF ls_str_filters-s_options-v_concluid IS INITIAL     AND  "Concluido
+         ls_str_filters-s_options-v_pendente IS NOT INITIAL AND  "Pendente
+         ls_str_filters-s_options-v_andamnto IS NOT INITIAL.     "Em andamento
+        DELETE me->t_alv_output WHERE status EQ me->c_str_semaforo-verde.
+      ENDIF.
+
+    ENDIF.
+
+    ""Para relatório sintético, filtar mostrando apenas uma linha de ALV por fornecimento
+    IF rdb2 EQ 'X'.
+      DELETE ADJACENT DUPLICATES FROM t_alv_output[] COMPARING vbeln_vl.
+    ENDIF.
+    "----------------------------------------------------------------
+
+    IF me->t_alv_output IS INITIAL AND gv_flag_criar_ot EQ ' '.
+      RAISE EXCEPTION TYPE lcx_exceptions
+      EXPORTING
+        iv_id = me->c_message_class
+        iv_no = '047'. "Nenhum registro localizado!
+    ENDIF.
+
+    CLEAR: gv_flag_criar_ot .
+
+
+  ENDMETHOD.                    "mtd_seleciona_dados
+
+  METHOD: mtd_mod9000_carregar.
+    DATA: lv_structure_name TYPE dd02l-tabname,
+          lv_gridtitle      TYPE lvc_title.
+
+    FIELD-SYMBOLS: <fs_tsaida> TYPE ANY TABLE,
+                   <fs_output> LIKE LINE OF me->t_alv_output.
+
+    DATA  lo_container    TYPE REF TO cl_gui_container.
+
+    DATA: lt_sort         TYPE lvc_t_sort,
+          lt_fieldcatalog TYPE lvc_t_fcat.
+
+    DATA: ls_stable       TYPE lvc_s_stbl,
+          ls_sort         TYPE lvc_s_sort,
+          ls_variant      TYPE disvariant,
+          ls_layout       TYPE lvc_s_layo.
+
+    DATA: lv_lines TYPE n LENGTH 6.
+
+    IF s_str_9000-o_alv IS BOUND.
+      ls_stable-row = abap_true.
+      ls_stable-col = abap_true.
+
+      me->s_str_9000-o_alv->refresh_table_display( is_stable = ls_stable ).
+      RETURN.
+    ENDIF.
+
+    IF s_str_9000-o_split IS NOT BOUND.
+      CREATE OBJECT s_str_9000-o_split
+        EXPORTING
+          parent  = cl_gui_custom_container=>screen0
+          rows    = 1
+          columns = 1.
+
+      lo_container = s_str_9000-o_split->get_container( row    = 1
+                                                        column = 1 ).
+
+      CREATE OBJECT s_str_9000-o_alv
+        EXPORTING
+          i_parent = lo_container.
+    ENDIF.
+
+    IF me->t_alv_output IS NOT INITIAL.
+      ASSIGN me->t_alv_output[] TO <fs_tsaida>[].
+    ENDIF.
+
+    lt_fieldcatalog = me->mtd_get_fieldcatalog(   iv_structure_name = me->c_str_fieldcat-output
+                                                  is_alig           = me->c_str_align-status ).
+
+
+    ls_variant-report = gv_repid.
+    ls_variant-variant = p_varian.
+
+    lv_lines = LINES( <fs_tsaida>[] ).
+    SHIFT lv_lines LEFT DELETING LEADING '0'.
+    CONCATENATE 'Total de OV: ' lv_lines INTO lv_gridtitle SEPARATED BY space.
+
+    ls_layout-sel_mode   = 'A'.
+    ls_layout-stylefname = 'XYZSTYLEZYX'.
+    ls_layout-grid_title = lv_gridtitle.
+
+    s_str_9000-o_alv->set_table_for_first_display(
+      EXPORTING
+        i_save                        = 'A'
+        i_default                     = abap_true
+        is_variant                    = ls_variant
+        is_layout                     = ls_layout
+      CHANGING
+        it_outtab                     = <fs_tsaida>[]
+        it_fieldcatalog               = lt_fieldcatalog[]
+        it_sort                       = lt_sort[]
+      EXCEPTIONS
+        OTHERS                        = 99  ).
+
+  ENDMETHOD.                    "mtd_mod9000_carregar
+
+  METHOD: mtd_get_fieldcatalog.
+
+    ""--------------------------------------------------------------
+    "" Tabela com os campos NÃO utilizados no Relatório Analítico
+    ""--------------------------------------------------------------
+    DATA: lr_rel_analitico TYPE RANGE OF lvc_s_fcat-fieldname.
+    DATA: ls_rel_analitico LIKE LINE OF lr_rel_analitico.
+
+    ls_rel_analitico-sign = 'I'.
+    ls_rel_analitico-option = 'EQ'.
+    ls_rel_analitico-low = 'BTGEW'.
+    APPEND ls_rel_analitico TO lr_rel_analitico.
+    CLEAR ls_rel_analitico.
+
+    ls_rel_analitico-sign = 'I'.
+    ls_rel_analitico-option = 'EQ'.
+    ls_rel_analitico-low = 'QTD_REMESSA'.
+    APPEND ls_rel_analitico TO lr_rel_analitico.
+    CLEAR ls_rel_analitico.
+
+    ls_rel_analitico-sign = 'I'.
+    ls_rel_analitico-option = 'EQ'.
+    ls_rel_analitico-low = 'USUARIO_SM'.
+    APPEND ls_rel_analitico TO lr_rel_analitico.
+    CLEAR ls_rel_analitico.
+
+    ls_rel_analitico-sign = 'I'.
+    ls_rel_analitico-option = 'EQ'.
+    ls_rel_analitico-low = 'DATA_SM'.
+    APPEND ls_rel_analitico TO lr_rel_analitico.
+    CLEAR ls_rel_analitico.
+
+    ls_rel_analitico-sign = 'I'.
+    ls_rel_analitico-option = 'EQ'.
+    ls_rel_analitico-low = 'HORA_SM'.
+    APPEND ls_rel_analitico TO lr_rel_analitico.
+    CLEAR ls_rel_analitico.
+
+    ""--------------------------------------------------------------
+    "" Tabela com os campos utilizados no Relatório Sintético
+    ""--------------------------------------------------------------
+    DATA: lr_rel_sintetico TYPE RANGE OF lvc_s_fcat-fieldname.
+    DATA: ls_rel_sintetico LIKE LINE OF lr_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'STATUS'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'VBELN'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'VTWEG'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'KUNNR'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'NAME1'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'VBELN_VL'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'QNAME'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'QDATU'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'QZEIT'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'ULT_DATU'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'ULT_ZEIT'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'MESSAGE'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'BTGEW'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'QTD_REMESSA'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'USUARIO_SM'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'DATA_SM'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    ls_rel_sintetico-sign = 'I'.
+    ls_rel_sintetico-option = 'EQ'.
+    ls_rel_sintetico-low = 'HORA_SM'.
+    APPEND ls_rel_sintetico TO lr_rel_sintetico .
+    CLEAR ls_rel_sintetico.
+
+    FIELD-SYMBOLS: <fs_fieldcat> TYPE lvc_s_fcat,
+                   <fs_hotspot>  TYPE ANY,
+                   <fs_tech>     TYPE ANY,
+                   <fs_alig>     TYPE ANY.
+
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = iv_structure_name
+      CHANGING
+        ct_fieldcat            = rt_fieldcat[]
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc IS NOT INITIAL.
+      RETURN.
+    ENDIF.
+
+    LOOP AT rt_fieldcat ASSIGNING <fs_fieldcat>.
+
+      "" Filtra os campos do Relatório Sintético, se o mesmo foi selecionado
+      IF rdb2 EQ 'X'.
+        IF NOT <fs_fieldcat>-fieldname IN lr_rel_sintetico.
+          <fs_fieldcat>-no_out = 'X'.
+        ENDIF.
+      ENDIF.
+      "" Filtra os campos do Relatório Analítico, se o mesmo foi selecionado
+      IF rdb1 EQ 'X'.
+        IF <fs_fieldcat>-fieldname IN lr_rel_analitico.
+          <fs_fieldcat>-no_out = 'X'.
+        ENDIF.
+      ENDIF.
+
+      <fs_fieldcat>-col_opt   = 'A'.
+
+      IF <fs_fieldcat>-inttype EQ 'P' OR
+         <fs_fieldcat>-inttype EQ 'I'.
+        <fs_fieldcat>-do_sum = abap_true.
+      ENDIF.
+
+      IF <fs_fieldcat>-domname EQ 'XFELD' OR
+         <fs_fieldcat>-domname EQ 'FLAG'.
+        <fs_fieldcat>-checkbox = abap_true.
+      ENDIF.
+
+      IF is_hotspot IS SUPPLIED.
+        ASSIGN COMPONENT <fs_fieldcat>-fieldname OF STRUCTURE is_hotspot TO <fs_hotspot>.
+        IF sy-subrc IS INITIAL.
+          <fs_fieldcat>-hotspot = abap_true.
+        ENDIF.
+      ENDIF.
+
+      IF is_tech IS SUPPLIED.
+        ASSIGN COMPONENT <fs_fieldcat>-fieldname OF STRUCTURE is_tech TO <fs_tech>.
+        IF sy-subrc IS INITIAL.
+          <fs_fieldcat>-tech = abap_true.
+        ENDIF.
+      ENDIF.
+
+      IF is_alig IS SUPPLIED.
+        ASSIGN COMPONENT <fs_fieldcat>-fieldname OF STRUCTURE is_alig TO <fs_alig>.
+        IF sy-subrc IS INITIAL.
+          <fs_fieldcat>-just = 'C'.
+        ENDIF.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.                    "mtd_get_fieldcatalog
+
+  METHOD: mtd_prioridade.
+    TYPES:
+      BEGIN OF ty_ltak_aux,
+        lgnum TYPE ltak-lgnum,
+        tanum TYPE ltak-tanum,
+        pernr TYPE ltak-pernr,
+        vbeln TYPE ltak-vbeln,
+        bdatu TYPE ltak-bdatu,
+        bzeit TYPE ltak-bzeit,
+      END OF ty_ltak_aux.
+
+    DATA: lt_ltak_aux TYPE TABLE OF ty_ltak_aux.
+
+    DATA: ls_ltak_aux   LIKE LINE OF lt_ltak_aux,
+          ls_index_rows LIKE LINE OF it_index_rows,
+          ls_alv_output LIKE LINE OF me->t_alv_output.
+
+    DATA: lv_titlebar TYPE bapi_msg,
+          lv_question TYPE bapi_msg,
+          lv_answer   TYPE char1,
+          lv_lines    TYPE sy-index,
+          lv_prio     TYPE ltak_pernr,
+          lv_msg      TYPE char255,
+          v_mode      TYPE c VALUE 'N',
+          t_msg       TYPE tab_bdcmsgcoll.
+
+    DATA: olx_ai_system_fault      TYPE REF TO cx_ai_system_fault.
+
+    FIELD-SYMBOLS <fs_alv_output> LIKE LINE OF me->t_alv_output.
+
+    IF it_index_rows[] IS INITIAL.
+      RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '050'. "Nenhum registro selecionado! Informe ao menos um registro.
+    ENDIF.
+
+    "Somente pode executar este botão para registros com o semáforo vermelho
+    LOOP AT it_index_rows INTO ls_index_rows.
+
+      READ TABLE me->t_alv_output INDEX ls_index_rows-index INTO ls_alv_output.
+      CHECK sy-subrc IS INITIAL AND ls_alv_output IS NOT INITIAL.
+
+      IF ls_alv_output-status NE me->c_str_semaforo-amarelo.
+        RAISE EXCEPTION TYPE lcx_exceptions
+          EXPORTING
+            iv_id = me->c_message_class
+            iv_no = '065'. "Selecione apenas registros com status andamento (em amarelo).
+      ENDIF.
+
+    ENDLOOP.
+
+    IF LINES( me->t_alv_output ) GT 1.
+
+      LOOP AT it_index_rows INTO ls_index_rows.
+
+        READ TABLE me->t_alv_output INDEX ls_index_rows-index ASSIGNING <fs_alv_output>.
+        CHECK sy-subrc IS INITIAL AND <fs_alv_output> IS ASSIGNED.
+
+        SELECT lgnum tanum pernr vbeln bdatu bzeit
+          FROM ltak
+          INTO TABLE lt_ltak_aux
+          WHERE lgnum   EQ <fs_alv_output>-lgnum
+            AND bwart   EQ '601'
+            AND bwlvs   EQ '601'
+            AND kquit   EQ space.
+
+        IF lt_ltak_aux[] IS INITIAL.
+          RAISE EXCEPTION TYPE lcx_exceptions
+            EXPORTING
+              iv_id = me->c_message_class
+              iv_no = '047'. "Nenhum registro localizado!
+        ELSE.
+          SORT lt_ltak_aux[] BY pernr DESCENDING.
+          READ TABLE lt_ltak_aux INTO ls_ltak_aux INDEX 1.
+          lv_prio = ls_ltak_aux-pernr.
+          lv_prio = lv_prio + 1.
+          CLEAR ls_ltak_aux.
+          READ TABLE lt_ltak_aux INTO ls_ltak_aux WITH KEY vbeln = ls_alv_output-vbeln_vl.
+          IF sy-subrc IS INITIAL AND ls_ltak_aux-pernr IS INITIAL.
+            "executa shdb
+
+            REFRESH it_bdc[].
+
+            PERFORM zf_preenche_bdc USING: 'X' 'SAPML03T' '0126',
+                                           ' ' 'BDC_CURSOR' 'LTAK-TANUM',
+                                           ' ' 'BDC_OKCODE' '/00',
+                                           ' ' 'LTAK-TANUM' ls_ltak_aux-tanum,
+                                           ' ' 'LTAK-LGNUM' ls_ltak_aux-lgnum .
+
+            PERFORM zf_preenche_bdc USING:  'X' 'SAPML03T' '0103' ,
+                                            ' ' 'BDC_CURSOR' 'LTAK-PERNR',
+                                            ' ' 'BDC_OKCODE' '/00',
+                                            ' ' 'LTAK-PERNR' lv_prio,
+                                            ' ' 'LTAK-STUZT' '00:00:00',
+                                            ' ' 'LTAK-ENUZT' '00:00:00' .
+
+            PERFORM zf_preenche_bdc USING:  'X' 'SAPML03T' '0103'          ,
+                                                ' ' 'BDC_CURSOR' 'LTAK-SOLWM'  ,
+                                                ' ' 'BDC_OKCODE' '=BU'         ,
+                                                ' ' 'LTAK-PERNR' lv_prio       ,
+                                                ' ' 'LTAK-STUZT' '00:00:00'    ,
+                                                ' ' 'LTAK-ENUZT' '00:00:00'    .
+
+            CALL TRANSACTION 'LT1A' USING it_bdc[]
+                                    MODE  v_mode
+                                    MESSAGES INTO  t_msg.
+          ENDIF.
+        ENDIF.
+
+      ENDLOOP.
+    ELSE.
+      RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '059'. "Selecionar apenas uma linha da OT
+      RETURN.
+    ENDIF.
+
+  ENDMETHOD.                    "mtd_prioridade
+
+  METHOD: mtd_clioff.
+
+    TYPES:
+      BEGIN OF ty_ltak_aux,
+        lgnum TYPE ltak-lgnum,
+        tanum TYPE ltak-tanum,
+        pernr TYPE ltak-pernr,
+        vbeln TYPE ltak-vbeln,
+        bdatu TYPE ltak-bdatu,
+        bzeit TYPE ltak-bzeit,
+      END OF ty_ltak_aux.
+
+    DATA: lt_ltak_aux TYPE TABLE OF ty_ltak_aux.
+
+    DATA: ls_ltak_aux   LIKE LINE OF lt_ltak_aux,
+          ls_index_rows LIKE LINE OF it_index_rows,
+          ls_alv_output LIKE LINE OF me->t_alv_output.
+
+    DATA: lv_titlebar TYPE bapi_msg,
+          lv_question TYPE bapi_msg,
+          lv_answer   TYPE char1,
+          lv_lines    TYPE sy-index,
+          lv_prio     TYPE ltak_pernr,
+          lv_msg      TYPE char255,
+          v_mode      TYPE c VALUE 'N',
+          t_msg       TYPE tab_bdcmsgcoll.
+
+    DATA: olx_ai_system_fault      TYPE REF TO cx_ai_system_fault.
+
+    FIELD-SYMBOLS <fs_alv_output> LIKE LINE OF me->t_alv_output.
+
+*    DATA: ls_index_rows LIKE LINE OF it_index_rows,
+*          ls_alv_output LIKE LINE OF me->t_alv_output.
+
+
+    DATA: tl_fields      TYPE TABLE OF sval,
+          wa_fields LIKE LINE OF tl_fields,
+          vl_returncode  TYPE c,
+          wa_zsdt071     TYPE zsdt071.
+
+*    DATA: olx_ai_system_fault      TYPE REF TO cx_ai_system_fault.
+
+*    FIELD-SYMBOLS <fs_alv_output> LIKE LINE OF me->t_alv_output.
+
+    IF it_index_rows[] IS INITIAL.
+      RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '050'. "Nenhum registro selecionado! Informe ao menos um registro.
+    ENDIF.
+
+    "Somente pode executar este botão para registros com o semáforo diferente de verde
+    LOOP AT it_index_rows INTO ls_index_rows.
+      READ TABLE me->t_alv_output INDEX ls_index_rows-index INTO ls_alv_output.
+      CHECK sy-subrc IS INITIAL AND ls_alv_output IS NOT INITIAL.
+      IF ls_alv_output-status EQ me->c_str_semaforo-verde.
+        RAISE EXCEPTION TYPE lcx_exceptions
+          EXPORTING
+            iv_id = me->c_message_class
+            iv_no = '073'.
+      ENDIF.
+    ENDLOOP.
+
+    CLEAR: ls_index_rows.
+    LOOP AT it_index_rows INTO ls_index_rows.
+      READ TABLE me->t_alv_output INDEX ls_index_rows-index ASSIGNING <fs_alv_output>.
+      CHECK sy-subrc IS INITIAL AND <fs_alv_output> IS ASSIGNED.
+      DELETE FROM zsdt071 WHERE vbeln = <fs_alv_output>-vbeln_vl.
+      IF sy-subrc EQ 0.
+        COMMIT WORK.
+      ELSE.
+        ROLLBACK WORK.
+      ENDIF.
+    ENDLOOP.
+
+
+  ENDMETHOD.                    "mtd_clioff
+
+
+  METHOD: mtd_clion.
+
+    DATA: ls_index_rows  LIKE LINE OF it_index_rows,
+          ls_alv_output  LIKE LINE OF me->t_alv_output.
+
+    DATA: vl_returncode  TYPE c,
+          wa_zsdt071     TYPE zsdt071.
+
+    DATA: lv_lgnum       TYPE lgnum,
+          lv_usuario     TYPE uname.
+
+    DATA: olx_ai_system_fault TYPE REF TO cx_ai_system_fault.
+
+    FIELD-SYMBOLS <fs_alv_output> LIKE LINE OF me->t_alv_output.
+
+    IF it_index_rows[] IS INITIAL.
+      RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '050'. "Nenhum registro selecionado! Informe ao menos um registro.
+    ENDIF.
+
+    "Somente pode executar este botão para registros com o semáforo diferente de verde, e as
+    "linhas selecionadas devem possuir o mesmo número de deopósito, caso contrário, levantar erro
+    LOOP AT it_index_rows INTO ls_index_rows.
+      READ TABLE me->t_alv_output INDEX ls_index_rows-index INTO ls_alv_output.
+      CHECK sy-subrc IS INITIAL AND ls_alv_output IS NOT INITIAL.
+      IF ls_alv_output-status EQ me->c_str_semaforo-verde.
+        RAISE EXCEPTION TYPE lcx_exceptions
+          EXPORTING
+            iv_id = me->c_message_class
+            iv_no = '073'.
+      ENDIF.
+
+      IF lv_lgnum IS INITIAL OR ls_alv_output-lgnum EQ lv_lgnum.
+        lv_lgnum = ls_alv_output-lgnum.
+      ELSE.
+        RAISE EXCEPTION TYPE lcx_exceptions
+          EXPORTING
+            iv_id = me->c_message_class
+            iv_no = '079'.
+      ENDIF.
+    ENDLOOP.
+
+    CLEAR: ls_index_rows.
+
+    ""Filtrar a ajuda de pesquisa pelo depósito das remessas
+    zsdr054_s_0100-lgnum = lv_lgnum.
+    ""Chama Pop-up para pegar o nome do usuário
+    CALL SCREEN 0100 STARTING AT 10 10.
+
+    IF sy-ucomm EQ 'OKAY'.
+
+      lv_usuario = zsdr054_s_0100-uname.
+
+      LOOP AT it_index_rows INTO ls_index_rows.
+        READ TABLE me->t_alv_output INDEX ls_index_rows-index ASSIGNING <fs_alv_output>.
+        CHECK sy-subrc IS INITIAL AND <fs_alv_output> IS ASSIGNED.
+        CLEAR: wa_zsdt071.
+        wa_zsdt071-vbeln = <fs_alv_output>-vbeln_vl.
+        wa_zsdt071-data = sy-datum.
+        wa_zsdt071-hora = sy-uzeit.
+        wa_zsdt071-usuario = lv_usuario.
+        wa_zsdt071-usr_set_status  = 'M'.
+        MODIFY zsdt071 FROM wa_zsdt071.
+        COMMIT WORK AND WAIT.
+      ENDLOOP.
+
+      CLEAR: zsdr054_s_0100.
+
+    ELSE.
+
+      CLEAR: zsdr054_s_0100.
+      LEAVE SCREEN.
+    ENDIF.
+
+  ENDMETHOD.                    "mtd_clion
+
+
+  METHOD: mtd_criar_ot.
+
+    DATA: ls_index_rows LIKE LINE OF it_index_rows,
+          ls_alv_output LIKE LINE OF me->t_alv_output.
+
+    DATA: lv_titlebar TYPE bapi_msg,
+          lv_question TYPE bapi_msg,
+          lv_answer   TYPE char1,
+          lv_lines    TYPE i,
+          lv_msg      TYPE char255,
+          lv_flag_msg TYPE xfeld.
+
+    FIELD-SYMBOLS <fs_alv_output> LIKE LINE OF me->t_alv_output.
+
+    IF it_index_rows[] IS INITIAL.
+      RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '050'. "Nenhum registro selecionado! Informe ao menos um registro.
+    ENDIF.
+
+    "" Selecionbar uma linha por vez no ALV para criar a OT, se houver mais de uma, apresentar um erro
+    DESCRIBE TABLE it_index_rows[] LINES lv_lines.
+
+    IF lv_lines GT 1.
+      RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '081'.
+    ENDIF.
+
+    "Somente pode executar este botão para registros com o semáforo vermelho
+    LOOP AT it_index_rows INTO ls_index_rows.
+
+      READ TABLE me->t_alv_output INDEX ls_index_rows-index INTO ls_alv_output.
+      CHECK sy-subrc IS INITIAL AND ls_alv_output IS NOT INITIAL.
+
+      IF ls_alv_output-status NE me->c_str_semaforo-vermelho.
+        RAISE EXCEPTION TYPE lcx_exceptions
+          EXPORTING
+            iv_id = me->c_message_class
+            iv_no = '051'. "Selecione apenas registros com status pendente (em vermelho).
+      ENDIF.
+
+      IF ls_alv_output-lgnum IS INITIAL.
+        RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '054'. "Impossível criar OT sem Nºdepósito.
+      ENDIF.
+
+    ENDLOOP.
+
+**    lv_lines = LINES( me->t_alv_output ).
+**    IF lv_lines > 1.
+**      lv_titlebar = 'Criar OTs'(c01).
+**      lv_question = 'Confirma criar as OTs'(c02).
+**    ELSE.
+**      lv_titlebar = 'Criar a OT'(c03).
+**      lv_question = 'Confirma criar a OT'(c04).
+**    ENDIF.
+
+    lv_titlebar = 'Criar a OT'(c03).
+    lv_question = 'Confirma criar a OT'(c04).
+
+    lv_answer = me->mtd_popup_to_confirm( iv_titlebar      = lv_titlebar
+                                          iv_text_question = lv_question ).
+
+    IF lv_answer NE '1'.
+      RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = me->c_message_class
+          iv_no = '052'. "Processo de Criação de OT cancelado!!!
+      RETURN.
+    ENDIF.
+
+    LOOP AT it_index_rows INTO ls_index_rows.
+
+      READ TABLE me->t_alv_output INDEX ls_index_rows-index ASSIGNING <fs_alv_output>.
+      CHECK sy-subrc IS INITIAL AND <fs_alv_output> IS ASSIGNED.
+
+      CALL FUNCTION 'L_TO_CREATE_DN'
+        EXPORTING
+          i_lgnum                    = <fs_alv_output>-lgnum
+          i_vbeln                    = <fs_alv_output>-vbeln_vl
+          i_update_task              = abap_true
+          i_commit_work              = abap_true
+        EXCEPTIONS
+          foreign_lock               = 1
+          dn_completed               = 2
+          partial_delivery_forbidden = 3
+          xfeld_wrong                = 4
+          ldest_wrong                = 5
+          drukz_wrong                = 6
+          dn_wrong                   = 7
+          squit_forbidden            = 8
+          no_to_created              = 9
+          teilk_wrong                = 10
+          update_without_commit      = 11
+          no_authority               = 12
+          no_picking_allowed         = 13
+          dn_hu_not_choosable        = 14
+          input_error                = 15
+          error_message              = 16
+          OTHERS                     = 17.
+
+      IF sy-subrc <> 0.
+
+        RAISE EXCEPTION TYPE lcx_exceptions
+        EXPORTING
+          iv_id = sy-msgid
+          iv_no = sy-msgno
+          iv_1  = sy-msgv1
+          iv_2  = sy-msgv2
+          iv_3  = sy-msgv3
+          iv_4  = sy-msgv4.
+
+        lv_flag_msg = 'X'.
+      ELSE.
+        lv_flag_msg = ' '.
+      ENDIF.
+    ENDLOOP.
+
+    IF lv_flag_msg EQ ' '.
+      gv_flag_criar_ot = 'X'.
+      MESSAGE s053(zcvantc).
+    ENDIF.
+
+  ENDMETHOD.                    "mtd_criar_ot
+
+  METHOD: mtd_popup_to_confirm.
+
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = iv_titlebar
+        text_question         = iv_text_question
+        text_button_1         = iv_text_button_1
+        icon_button_1         = iv_icon_button_1
+        text_button_2         = iv_text_button_2
+        icon_button_2         = iv_icon_button_2
+        default_button        = iv_default_button
+        display_cancel_button = iv_display_cancel_button
+      IMPORTING
+        answer                = rv_result.
+  ENDMETHOD.                    "mtd_popup_to_confirm
+
+  METHOD: mtd_on_toolbar.
+
+    DATA: lt_function TYPE tt_function.
+
+    FIELD-SYMBOLS: <fs_function> LIKE LINE OF lt_function,
+                   <fs_toolbar>  LIKE LINE OF e_object->mt_toolbar.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&INFO'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&GRAPH'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&DETAIL'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&CHECK'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&REFRESH'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&LOCAL&CUT'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&LOCALÂ©'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&LOCAL&PASTE'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&LOCAL&UNDO'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&LOCAL&APPEND'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&LOCALÂ©_ROW'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&&LOCAL&INSERT_ROW'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&LOCAL&DELETE_ROW'.
+
+    APPEND INITIAL LINE TO lt_function ASSIGNING <fs_function>.
+    <fs_function>-sign   = 'I'.
+    <fs_function>-option = 'EQ'.
+    <fs_function>-low    = '&LOCALÂ©'.
+
+    DELETE e_object->mt_toolbar WHERE function IN lt_function .
+    "--------------------------
+    CASE sender.
+      WHEN me->s_str_9000-o_alv.
+        "Add line separator
+        APPEND INITIAL LINE TO e_object->mt_toolbar ASSIGNING <fs_toolbar>.
+        <fs_toolbar>-butn_type = '3'.
+
+        "Add botton
+        APPEND INITIAL LINE TO e_object->mt_toolbar ASSIGNING <fs_toolbar>.
+        <fs_toolbar>-function  = c_str_ucomm-refresh.
+        <fs_toolbar>-icon      = icon_refresh.
+        <fs_toolbar>-quickinfo = text-b01. "Refresh
+        <fs_toolbar>-text      = text-b01. "Refresh.
+
+        "Add botton
+        APPEND INITIAL LINE TO e_object->mt_toolbar ASSIGNING <fs_toolbar>.
+        <fs_toolbar>-function  = c_str_ucomm-prior.
+        <fs_toolbar>-icon      = icon_create.
+        <fs_toolbar>-quickinfo = text-b03. "Definir Prioridade
+        <fs_toolbar>-text      = text-b03. "Definir Prioridade.
+
+        "Add botton
+        APPEND INITIAL LINE TO e_object->mt_toolbar ASSIGNING <fs_toolbar>.
+        <fs_toolbar>-function  = c_str_ucomm-clion.
+        <fs_toolbar>-icon      = icon_checked.
+        <fs_toolbar>-quickinfo = text-b04. "Cliente ON
+        <fs_toolbar>-text      = text-b04. "Cliente ON.
+
+        "Add botton
+        APPEND INITIAL LINE TO e_object->mt_toolbar ASSIGNING <fs_toolbar>.
+        <fs_toolbar>-function  = c_str_ucomm-clioff.
+        <fs_toolbar>-icon      = icon_incomplete.
+        <fs_toolbar>-quickinfo = text-b05. "Cliente Off
+        <fs_toolbar>-text      = text-b05. "Cliente Off.
+
+        IF NOT me->t_alv_output IS INITIAL.
+          "Add line separator
+          APPEND INITIAL LINE TO e_object->mt_toolbar ASSIGNING <fs_toolbar>.
+          <fs_toolbar>-butn_type = '3'.
+
+          "Add botton
+          APPEND INITIAL LINE TO e_object->mt_toolbar ASSIGNING <fs_toolbar>.
+          <fs_toolbar>-function  = c_str_ucomm-criar_ot.
+          <fs_toolbar>-icon      = icon_transport.
+          <fs_toolbar>-quickinfo = text-b02. "Print
+          <fs_toolbar>-text      = text-b02. "Print.
+
+        ENDIF.
+    ENDCASE.
+
+  ENDMETHOD.                    "mtd_on_toolbar
+
+  METHOD: mtd_on_user_command.
+
+    DATA lt_index_rows TYPE lvc_t_row.
+
+    sender->get_selected_rows( IMPORTING et_index_rows = lt_index_rows ).
+    DELETE lt_index_rows[] WHERE rowtype IS NOT INITIAL.
+
+    TRY.
+        CASE e_ucomm.
+          WHEN me->c_str_ucomm-refresh.
+            me->mtd_seleciona_dados( ).
+          WHEN me->c_str_ucomm-criar_ot.
+            me->mtd_criar_ot( it_index_rows = lt_index_rows[] ).
+            me->mtd_seleciona_dados( ).
+          WHEN me->c_str_ucomm-prior.
+            me->mtd_prioridade( it_index_rows = lt_index_rows[] ).
+            me->mtd_seleciona_dados( ).
+          WHEN me->c_str_ucomm-clion.
+            me->mtd_clion( it_index_rows = lt_index_rows[] ).
+            me->mtd_seleciona_dados( ).
+          WHEN me->c_str_ucomm-clioff.
+            me->mtd_clioff( it_index_rows = lt_index_rows[] ).
+            me->mtd_seleciona_dados( ).
+        ENDCASE.
+
+        LEAVE SCREEN.
+
+      CATCH lcx_exceptions INTO o_exception.
+        MESSAGE ID o_exception->if_t100_message~t100key-msgid
+           TYPE 'S' NUMBER o_exception->if_t100_message~t100key-msgno
+                      WITH o_exception->if_t100_message~t100key-attr1
+                           o_exception->if_t100_message~t100key-attr2
+                           o_exception->if_t100_message~t100key-attr3
+                           o_exception->if_t100_message~t100key-attr4
+        DISPLAY LIKE 'E' .
+    ENDTRY.
+
+  ENDMETHOD.                    "mtd_on_user_command
+
+  METHOD: mtd_on_hotspot_click.
+	DATA bdcdata_tab TYPE TABLE OF bdcdata.
+	DATA opt TYPE ctu_params.
+	
+	IF e_column_id = me->c_str_hotspot-partner.
+	  READ TABLE me->t_alv_output INDEX es_row_no-row_id INTO DATA(ls_row).
+	  
+	  IF sy-subrc IS INITIAL.
+	    bdcdata_tab = VALUE #(
+		( program = 'ZGCMP_003' dynpro = '9000' dynbegin = 'X' )
+		(fnam = '' fval = )).
+	    opt-dismode = 'E'.
+	    opt-defsize = 'X'.
+	    
+	    TRY.
+		CALL TRANSACTION '' WITH AUTHORITY-CHECK USING bdcdata_tab OPTIONS FROM opt.
+		CATCH cx_sy_authorization_error.
+	    ENDTRY.
+	  ENDIF.
+	ENDIF.
+  ENDMETHOD.                    "mtd_on_hotspot_click
+
+ENDCLASS.                    "lcl_monitor IMPLEMENTATION
+*&      Form  ZF_PREENCHE_BDC
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_TY_BDC  text
+*      -->P_1718   text
+*      -->P_1719   text
+*      -->P_1720   text
+*----------------------------------------------------------------------*
+FORM zf_preenche_bdc  USING tela_init
+                            name
+                            value.
+  DATA: st_bdc TYPE bdcdata.
+*Limpa a wa da tabela bdc
+  CLEAR st_bdc.
+  IF tela_init = 'X'.
+    st_bdc-program = name.
+    st_bdc-dynpro = value.
+    st_bdc-dynbegin = 'X'.
+  ELSE.
+    st_bdc-fnam = name.
+    st_bdc-fval = value.
+  ENDIF.
+
+  APPEND st_bdc TO it_bdc.
+
+ENDFORM.                    " ZF_PREENCHE_BDC

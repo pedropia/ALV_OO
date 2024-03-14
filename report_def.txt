@@ -1,0 +1,132 @@
+*&======================================================================
+*&                          CVA CONSULTORIA
+*&======================================================================
+*& PROGRAMA: ZSDI054_DEF
+*& TITULO:   Include para Definição da Classe
+*& AUTOR:    Wanderson Moreira Silva
+*& DATA:    17.03.2022
+*&----------------------------------------------------------------------
+*& HISTÓRICO DE MODIFICAÇÃO
+*&----------------------------------------------------------------------
+*&    DATA    |    AUTOR     |             DESCRIÇÃO
+*&----------------------------------------------------------------------
+*& 17/03/2022 |    Wanderson |          Versão inicial
+*&======================================================================
+
+CLASS lcx_exceptions DEFINITION INHERITING FROM cx_dynamic_check FINAL.
+  PUBLIC SECTION.
+    INTERFACES if_t100_message.
+    METHODS:
+      constructor IMPORTING iv_id TYPE symsgid
+                            iv_no TYPE symsgno
+                            iv_1  TYPE symsgv  OPTIONAL
+                            iv_2  TYPE symsgv  OPTIONAL
+                            iv_3  TYPE symsgv  OPTIONAL
+                            iv_4  TYPE symsgv  OPTIONAL.
+
+ENDCLASS.                    "lcx_exceptions DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS lcl_monitor DEFINITION
+*----------------------------------------------------------------------*
+CLASS lcl_monitor DEFINITION FINAL.
+  PUBLIC SECTION.
+    TYPES:
+      BEGIN OF ty_function,
+        sign   TYPE bapisign,
+        option TYPE bapioption,
+        low    TYPE ui_func,
+        high   TYPE ui_func,
+      END OF ty_function,
+      tt_function TYPE STANDARD TABLE OF ty_function.
+
+    CONSTANTS:
+*      BEGIN OF c_str_tech,
+*      END OF c_str_tech.
+
+      BEGIN OF c_str_ucomm,
+        refresh  TYPE sy-ucomm VALUE 'REFRESH',
+        criar_ot TYPE sy-ucomm VALUE 'CRIAR_OT',
+        prior     TYPE sy-ucomm VALUE 'PRIOR',
+        clion     TYPE sy-ucomm VALUE 'CLION',
+        clioff    TYPE sy-ucomm VALUE 'CLIOFF',
+      END OF c_str_ucomm,
+
+      BEGIN OF c_str_align,
+        status TYPE lvc_fname VALUE 'STATUS',
+      END OF c_str_align,
+
+      BEGIN OF c_str_fieldcat,
+        output TYPE dd02l-tabname VALUE 'ZSDE054',
+      END OF c_str_fieldcat,
+
+      BEGIN OF c_str_semaforo,
+        "--- Semaforo
+        verde    TYPE zsde054-status VALUE icon_green_light,
+        amarelo  TYPE zsde054-status VALUE icon_yellow_light,
+        vermelho TYPE zsde054-status VALUE icon_red_light,
+      END OF c_str_semaforo,
+
+      c_message_class TYPE bapiret2-id VALUE 'ZCVANTC'.
+
+    DATA: BEGIN OF s_str_9000,
+      o_split TYPE REF TO cl_gui_splitter_container,
+      o_alv   TYPE REF TO cl_gui_alv_grid,
+    END   OF s_str_9000.
+
+    DATA: s_str_filters TYPE ty_str_filters,
+          t_alv_output  TYPE STANDARD TABLE OF zsde054.
+
+    "------------------------------------------------------------
+    METHODS: constructor IMPORTING is_filters TYPE ty_str_filters
+      RAISING lcx_exceptions.
+
+    METHODS: mtd_seleciona_dados RAISING lcx_exceptions.
+
+    METHODS: mtd_mod9000_carregar.
+
+*    METHODS: mtd_mod9000_user_command IMPORTING iv_ucomm TYPE sy-ucomm
+*                                      RAISING   lcx_exceptions.
+
+    METHODS: mtd_get_fieldcatalog IMPORTING iv_structure_name  TYPE dd02l-tabname
+                                            is_hotspot         TYPE any OPTIONAL
+                                            is_tech            TYPE any OPTIONAL
+                                            is_alig            TYPE any OPTIONAL
+                                  RETURNING value(rt_fieldcat) TYPE lvc_t_fcat.
+
+    METHODS: mtd_criar_ot IMPORTING it_index_rows TYPE lvc_t_row OPTIONAL
+                          RAISING   lcx_exceptions.
+
+    METHODS: mtd_prioridade IMPORTING it_index_rows TYPE lvc_t_row OPTIONAL
+                            RAISING   lcx_exceptions.
+
+    METHODS: mtd_clion IMPORTING it_index_rows TYPE lvc_t_row OPTIONAL
+                            RAISING   lcx_exceptions.
+    METHODS: mtd_clioff IMPORTING it_index_rows TYPE lvc_t_row OPTIONAL
+                        RAISING   lcx_exceptions.
+
+    METHODS: mtd_popup_to_confirm IMPORTING iv_titlebar	             TYPE any
+                                            iv_text_question         TYPE any
+                                            iv_text_button_1         TYPE any       DEFAULT 'Sim'
+                                            iv_icon_button_1         TYPE icon-name DEFAULT 'ICON_CHECKED'
+                                            iv_text_button_2         TYPE any       DEFAULT 'Não'
+                                            iv_icon_button_2         TYPE icon-name DEFAULT 'ICON_CANCEL'
+                                            iv_default_button        TYPE any       DEFAULT '2'
+                                            iv_display_cancel_button TYPE any       DEFAULT space
+                                  RETURNING value(rv_result)         TYPE char1.
+
+    METHODS: mtd_on_toolbar FOR EVENT toolbar OF cl_gui_alv_grid
+      IMPORTING sender e_interactive e_object.
+
+    METHODS: mtd_on_user_command FOR EVENT user_command OF cl_gui_alv_grid
+      IMPORTING sender e_ucomm.
+
+    METHODS: mtd_on_hotspot_click FOR EVENT hotspot_click OF cl_gui_alv_grid
+      IMPORTING sender e_column_id e_row_id es_row_no.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+    METHODS: mtd_authority_check RAISING lcx_exceptions.
+
+ENDCLASS.                    "lcl_monitor DEFINITION
